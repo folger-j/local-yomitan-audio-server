@@ -5,6 +5,7 @@ bundled
 node_modules
 wrangler.toml
 data/*
+!data/files_go_here
 *txt
 *zip
 *sql
