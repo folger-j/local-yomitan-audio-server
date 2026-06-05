@@ -4,7 +4,8 @@
 bundled
 node_modules
 wrangler.toml
-data/*files
+data/*
 *txt
 *zip
 *sql
+config.env

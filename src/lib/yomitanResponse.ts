@@ -15,7 +15,7 @@ export async function generateYomitanResponseObject(
     entries: AudioEntry[],
     ttsEntries: YomitanAudioSource[],
     request: IRequest,
-    env: Env
+    env: any
 ): Promise<YomitanResponse> {
     const audioSources = entries.map((entry) => {
         let audioUrl;

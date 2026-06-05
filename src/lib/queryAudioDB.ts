@@ -1,6 +1,6 @@
-import { StatusError } from 'itty-router';
+import Database = require('better-sqlite3');
+import * as path from 'node:path';
 import { katakanaToHiragana } from './utils';
-
 import type { AudioSource } from './queryUtils';
 import { log } from './logger';
 
@@ -12,7 +12,11 @@ export interface AudioEntry {
     display: string;
 }
 
-export async function queryAudioDB(term: string, reading: string, sources: AudioSource[], env: Env): Promise<AudioEntry[]> {
+// Verbindung zur lokalen SQLite-Datei herstellen
+const dbPath = path.resolve('/app/data/audio.sqlite');
+const db = new Database(dbPath, { fileMustExist: false });
+
+export async function queryAudioDB(term: string, reading: string, sources: AudioSource[], env: any): Promise<AudioEntry[]> {
     let baseCondition = 'WHERE expression = ?';
     const params: any[] = [term];
 
@@ -30,19 +34,22 @@ export async function queryAudioDB(term: string, reading: string, sources: Audio
 
     const query = `SELECT expression, reading, source, file, display FROM entries ${baseCondition}`;
 
-    let d1results: D1Result = await env.yomitan_audio_d1_db
-        .prepare(query)
-        .bind(...params)
-        .all();
-
-    if (d1results.success) {
-        return d1results.results as AudioEntry[];
-    } else {
-        log('error', 'query_pitch_db_failed', `Database query failed for term: ${term}, reading: ${reading}`, { term: term, reading: reading, d1_result: d1results.error || 'Unknown Error' });
-        throw new StatusError(500, 'Database query failed');
+    try {
+        // better-sqlite3 führt Queries synchron und extrem schnell aus
+        const stmt = db.prepare(query);
+        const results = stmt.all(...params) as AudioEntry[];
+        return results;
+    } catch (e: any) {
+        log('error', 'query_pitch_db_failed', `Database query failed for term: ${term}, reading: ${reading}`, { 
+            term, 
+            reading, 
+            error: e.message 
+        });
+        throw new Error('Database query failed: ' + e.message);
     }
 }
 
+// Die Funktionen generateDisplayNames und sortResults bleiben exakt gleich wie vorher:
 export async function generateDisplayNames(entries: AudioEntry[], term: string, reading: string): Promise<string[]> {
     let names: string[] = [];
     entries.forEach((entry) => {
@@ -50,7 +57,6 @@ export async function generateDisplayNames(entries: AudioEntry[], term: string, 
         if (entry.display) {
             name += `: ${entry.display}`;
         }
-
         if (term == entry.expression && reading == entry.reading) {
             name += ` (Expression+Reading)`;
         } else if (term == entry.expression) {
@@ -58,25 +64,14 @@ export async function generateDisplayNames(entries: AudioEntry[], term: string, 
         } else if (reading == entry.reading) {
             name += ` (Only Reading)`;
         }
-
         names.push(name);
     });
-
     return names;
 }
 
 export async function sortResults(entries: AudioEntry[], names: string[]): Promise<AudioEntry[]> {
     const sourcePriority: { [key: string]: number } = {
-        nhk16: 0,
-        daijisen: 1,
-        shinmeikai8: 2,
-        jpod: 3,
-        taas: 4,
-        ozk5: 5,
-        forvo: 6,
-        forvo_ext: 7,
-        forvo_ext2: 8,
-        tts: 9,
+        nhk16: 0, daijisen: 1, shinmeikai8: 2, jpod: 3, taas: 4, ozk5: 5, forvo: 6, forvo_ext: 7, forvo_ext2: 8, tts: 9
     };
 
     const getMatchTypePriority = (name?: string): number => {
@@ -89,24 +84,18 @@ export async function sortResults(entries: AudioEntry[], names: string[]): Promi
 
     const result = entries.map((entry, index) => {
         const copy = { ...entry };
-
         if (index < names.length) {
             copy.display = names[index];
         } else {
             copy.display = undefined as unknown as string;
         }
-
         return copy;
     });
 
     result.sort((a, b) => {
         const aMatchPriority = getMatchTypePriority(a.display);
         const bMatchPriority = getMatchTypePriority(b.display);
-
-        if (aMatchPriority !== bMatchPriority) {
-            return aMatchPriority - bMatchPriority;
-        }
-
+        if (aMatchPriority !== bMatchPriority) return aMatchPriority - bMatchPriority;
         const aPriority = sourcePriority[a.source] ?? Number.MAX_SAFE_INTEGER;
         const bPriority = sourcePriority[b.source] ?? Number.MAX_SAFE_INTEGER;
         return aPriority - bPriority;

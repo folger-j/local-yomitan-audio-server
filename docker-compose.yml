@@ -1,0 +1,14 @@
+services:
+  yomitan-audio:
+    build: .
+    container_name: yomitan-local-audio
+    ports:
+      - "8787:8787"
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./config.env:/app/config.env
+    environment:
+      - AUTHENTICATION_ENABLED=false
+      - AWS_POLLY_ENABLED=false
+    restart: unless-stopped

@@ -8,10 +8,12 @@ import { verifyApiKey } from '../lib/keyVerification';
 import { fetchAudioTTS, fetchAudioDB as returnAudio, saveAudioTTS } from '../lib/fetchAudioDB';
 import { generateTTSAudio } from '../lib/awsPolly';
 import { withApiKey } from '../lib/middleware';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export const router = AutoRouter({ base: '/audio', catch: undefined });
 
-router.get('/list', withApiKey, async (request: IRequest, env: Env) => {
+router.get('/list', withApiKey, async (request: IRequest, env: any) => {
     await verifyApiKey(request, env);
 
     log('info', 'audio_list', `Searching for audio with: ${request.url}`, request.query);
@@ -37,36 +39,94 @@ router.get('/list', withApiKey, async (request: IRequest, env: Env) => {
 
     const yomitanResponses = await generateYomitanResponseObject(sortedResults, ttsEntries, request, env);
 
-    return json(yomitanResponses, { status: 200 });
+    return json(yomitanResponses, { 
+    status: 200,
+    headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': '*',
+    }
+});
 });
 
-export const mp3 = createResponse('audio/mpeg');
 
-router.get('/get/:source/:file', withApiKey, async (request: IRequest, env: Env) => {
+export const mp3 = (body: any, options: any = {}) => {
+    // Falls der Body null oder leer ist, direkt 404 werfen
+    if (!body) {
+        return new Response("Not Found", { status: 404 });
+    }
+
+    // Wir konvertieren den Body in ein Uint8Array, um die exakte Byte-Länge zu ermitteln
+    const data = body instanceof Uint8Array ? body : new Uint8Array(body);
+
+    return new Response(data, {
+        status: options.status || 200,
+        headers: {
+            'Content-Type': 'audio/mpeg',
+            'Content-Length': data.length.toString(),
+            'Accept-Ranges': 'bytes',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': '*',
+        }
+    });
+};
+
+
+// 1. ROUTE: Für Dateien, die direkt in der Source liegen (z.B. /get/source/datei.mp3)
+router.get('/get/:source/:file', withApiKey, async (request: IRequest, env: any) => {
     await verifyApiKey(request, env);
-
     const source = request.params.source;
-    const file = decodeURIComponent(request.params.file);
+    let file = decodeURIComponent(request.params.file);
 
-    log('info', 'audio_get', `Fetching audio: ${source}/${file}`, { source, file });
+    // API-Key Suffix abschneiden, falls vorhanden
+    if (file.includes('?')) file = file.split('?')[0];
+    if (file.includes('&')) file = file.split('&')[0];
 
-    const audio = await returnAudio(source, file, env);
-    return mp3(audio, { status: 200 });
+    log('info', 'audio_get', `Local File Fetch (Route 1): data/${source}/${file}`);
+
+    try {
+        const filePath = path.resolve('/app/data', source, file);
+        if (!fs.existsSync(filePath)) {
+            return error(404, `File not existing on disk: ${filePath}`);
+        }
+        const fileBuffer = fs.readFileSync(filePath);
+        return mp3(fileBuffer, { status: 200 });
+    } catch (e: any) {
+        return error(404, `Read Error Route 1: ${e.message}`);
+    }
 });
 
-router.get('/get/:source/:folder/:file', withApiKey, async (request: IRequest, env: Env) => {
+// 2. ROUTE: Für verschachtelte Dateien (z.B. /get/nhk16/audio/20170928151250.mp3)
+router.get('/get/:source/:folder/:file', withApiKey, async (request: IRequest, env: any) => {
     await verifyApiKey(request, env);
-
     const source = request.params.source;
-    const file = decodeURIComponent(request.params.folder) + '/' + decodeURIComponent(request.params.file);
+    const folder = decodeURIComponent(request.params.folder);
+    let file = decodeURIComponent(request.params.file);
 
-    log('info', 'audio_get', `Fetching audio: ${source}/${file}`, { source, file });
+    // 🔥 API-Key Suffix radikal abschneiden, damit der reine Dateiname übrig bleibt!
+    if (file.includes('?')) file = file.split('?')[0];
+    if (file.includes('&')) file = file.split('&')[0];
 
-    const audio = await returnAudio(source, file, env);
-    return mp3(audio, { status: 200 });
+    const relativePath = `${folder}/${file}`;
+    log('info', 'audio_get', `Local File Fetch (Route 2): data/${source}/${relativePath}`);
+
+    try {
+        // path.resolve garantiert den sauberen, absoluten Root-Pfad im Docker-Container
+        const filePath = path.resolve('/app/data', source, folder, file);
+        
+        if (!fs.existsSync(filePath)) {
+            return error(404, `File physisch nicht gefunden unter: ${filePath}`);
+        }
+
+        const fileBuffer = fs.readFileSync(filePath);
+        return mp3(fileBuffer, { status: 200 });
+    } catch (e: any) {
+        return error(404, `Read Error Route 2: ${e.message}`);
+    }
 });
 
-router.get('/tts', withApiKey, async (request: IRequest, env: Env, context: ExecutionContext) => {
+router.get('/tts', withApiKey, async (request: IRequest, env: any) => {
     await verifyApiKey(request, env);
 
     const [term, reading] = await unpack_term_reading(request);
@@ -87,7 +147,9 @@ router.get('/tts', withApiKey, async (request: IRequest, env: Env, context: Exec
 
     const generatedAudio = await generateTTSAudio(term, reading, pitch, env);
 
-    context.waitUntil(saveAudioTTS(tts_identifier, generatedAudio, env));
+    // background save
+    saveAudioTTS(tts_identifier, generatedAudio, env)
+        .catch(console.error);
 
     return mp3(generatedAudio, { status: 200 });
 });

@@ -1,3 +1,8 @@
+// @ts-ignore
+type D1Result = any;
+// @ts-ignore
+type Env = any;
+
 import { IRequest, StatusError } from 'itty-router';
 import { YomitanAudioSource } from './yomitanResponse';
 import { AudioSource } from './queryUtils';
@@ -12,7 +17,7 @@ export interface PitchDBEntry {
     count: string;
 }
 
-export async function queryPitchDB(term: string, reading: string, env: Env): Promise<PitchDBEntry[]> {
+export async function queryPitchDB(term: string, reading: string, env: any): Promise<PitchDBEntry[]> {
     let baseCondition = 'WHERE expression = ?';
     const params: any[] = [term];
 
@@ -70,7 +75,7 @@ export async function createTTSEntries(
     term: string,
     reading: string,
     sources: AudioSource[],
-    env: Env,
+    env: any,
     request: IRequest
 ): Promise<YomitanAudioSource[]> {
     if (!env.AWS_POLLY_ENABLED) {

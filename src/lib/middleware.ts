@@ -1,6 +1,6 @@
 import { IRequest } from 'itty-router';
 
-export const withApiKey = async (request: IRequest, env: Env, context: ExecutionContext) => {
+export const withApiKey = async (request: IRequest, env: any) => {
     if (!env.AUTHENTICATION_ENABLED) {
         return;
     }

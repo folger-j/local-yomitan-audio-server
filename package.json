@@ -2,21 +2,27 @@
 	"name": "yomitan-audio-worker",
 	"version": "0.0.0",
 	"private": true,
+	"main": "src/index.ts",
 	"scripts": {
-		"deploy": "wrangler deploy",
-		"dev": "wrangler dev",
-		"start": "wrangler dev",
-		"cf-typegen": "wrangler types"
+		"start": "node -r ts-node/register src/index.ts",
+		"dev": "ts-node-dev --respawn src/index.ts"
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "^4.20250409.0",
+		"@types/better-sqlite3": "^7.6.10",
+		"@types/node": "^25.9.1",
 		"prettier": "^3.5.3",
+		"ts-node": "^10.9.2",
+		"ts-node-dev": "^2.0.0",
 		"typescript": "^5.5.2",
 		"wrangler": "^4.7.0"
 	},
 	"dependencies": {
 		"aws4fetch": "^1.0.20",
+		"better-sqlite3": "^11.0.0",
+		"fs": "^0.0.1-security",
 		"itty-fetcher": "^0.9.4",
-		"itty-router": "^5.0.18"
+		"itty-router": "^5.0.18",
+		"path": "^0.12.7"
 	}
 }

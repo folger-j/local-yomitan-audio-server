@@ -7,7 +7,7 @@ enum TextTypes {
     TEXT = 'text',
 }
 
-export async function generateTTSAudio(term: string, reading: string, pitch: string, env: Env): Promise<Blob> {
+export async function generateTTSAudio(term: string, reading: string, pitch: string, env: any): Promise<Blob> {
     const accessKeyId = env.AWS_ACCESS_KEY_ID;
     const secretAccessKey = env.AWS_SECRET_ACCESS_KEY;
     const region = 'eu-central-1';

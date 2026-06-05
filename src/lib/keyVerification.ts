@@ -1,6 +1,6 @@
 import { IRequest, StatusError } from 'itty-router';
 
-export async function verifyApiKey(request: IRequest, env: Env) {
+export async function verifyApiKey(request: IRequest, env: any) {
     if (!env.AUTHENTICATION_ENABLED) {
         return;
     }
